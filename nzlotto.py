@@ -162,23 +162,23 @@ def main():
     plt.legend()
     plt.show()
     
-    # # Generate predictions
-    # last_numbers = scaler.transform(data.iloc[-look_back:].values)
-    # main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
+    # Generate predictions
+    last_numbers = scaler.transform(data.iloc[-look_back:].values)
+    main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
     
-    # print("Predicted Lotto Numbers:")
-    # print("Main Numbers:", " ".join(map(str, main_numbers)))
-    # print("Bonus Number:", bonus_number)
+    print("Predicted Lotto Numbers:")
+    print("Main Numbers:", " ".join(map(str, main_numbers)))
+    print("Bonus Number:", bonus_number)
 
-    # # Generate multiple predictions
-    # num_predictions = 5
-    # print("\nMultiple Predictions:")
-    # for i in range(num_predictions):
-    #     main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
-    #     print(f"Prediction {i+1}: Main Numbers: {' '.join(map(str, main_numbers))}, Bonus Number: {bonus_number}")
-    #     # Update last_numbers for next prediction
-    #     new_numbers = np.array(main_numbers + [bonus_number]).reshape(1, -1)
-    #     last_numbers = np.vstack((last_numbers[1:], scaler.transform(new_numbers)))
+    # Generate multiple predictions
+    num_predictions = 5
+    print("\nMultiple Predictions:")
+    for i in range(num_predictions):
+        main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
+        print(f"Prediction {i+1}: Main Numbers: {' '.join(map(str, main_numbers))}, Bonus Number: {bonus_number}")
+        # Update last_numbers for next prediction
+        new_numbers = np.array(main_numbers + [bonus_number]).reshape(1, -1)
+        last_numbers = np.vstack((last_numbers[1:], scaler.transform(new_numbers)))
 
 if __name__ == "__main__":
     main()
