@@ -53,19 +53,19 @@ def prepare_data(data, look_back=10):
 
 def build_model_tuner(hp):
     model = Sequential([
-        Input(shape=(hp.Int('look_back', 5, 20), 7)),
-        LSTM(hp.Int('lstm_units', 100, 150), activation='relu', return_sequences=True, 
-             kernel_regularizer=l1_l2(l1=hp.Float('l1', 1e-5, 1e-2), l2=hp.Float('l2', 1e-5, 1e-2))),
-        Dropout(hp.Float('dropout', 0.2, 0.3)),
-        LSTM(hp.Int('lstm_units', 100, 150), activation='relu', return_sequences=True,
-             kernel_regularizer=l1_l2(l1=hp.Float('l1', 1e-5, 1e-2), l2=hp.Float('l2', 1e-5, 1e-2))),
-        Dropout(hp.Float('dropout', 0.2, 0.3)),
-        LSTM(hp.Int('lstm_units', 100, 150), activation='relu',
-             kernel_regularizer=l1_l2(l1=hp.Float('l1', 1e-5, 1e-2), l2=hp.Float('l2', 1e-5, 1e-2))),
-        Dropout(hp.Float('dropout', 0.2, 0.3)),
+        Input(shape=(hp['look_back'], 7)),
+        LSTM(hp['lstm_units'], activation='relu', return_sequences=True, 
+             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
+        Dropout(hp['dropout']),
+        LSTM(hp['lstm_units'], activation='relu', return_sequences=True,
+             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
+        Dropout(hp['dropout']),
+        LSTM(hp['lstm_units'], activation='relu',
+             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
+        Dropout(hp['dropout']),
         Dense(7)
     ])
-    model.compile(optimizer=Adam(hp.Float('learning_rate', 1e-4, 1e-1, sampling='log')), loss='mse')
+    model.compile(optimizer=Adam(hp['learning_rate']), loss='mse')
     return model
 
 
@@ -80,11 +80,14 @@ def generate_lotto_numbers(model, last_numbers, scaler):
 
 
 def analyze_data(data):
+    # Frequency analysis
     all_numbers = data.iloc[:, :6].values.flatten()
     
+    # Calculate frequency of each number and sort in descending order
     number_frequency = pd.Series(all_numbers).value_counts().sort_values(ascending=False)
     
-    fig, ax = plt.subplots(figsize=(24, 10))
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(24, 10))  # Increased width to accommodate text
     sns.histplot(all_numbers, bins=range(1, max(all_numbers)+2), kde=False, discrete=True, ax=ax)
     ax.set_title('Distribution of Winning Numbers', fontsize=16)
     ax.set_xlabel('Number', fontsize=12)
@@ -93,9 +96,11 @@ def analyze_data(data):
     ax.set_yticks(range(0, max(number_frequency)+1))
     ax.grid(axis='y', linestyle='--', alpha=0.7)
     
+    # Add summary title
     ax.text(1.02, 1.0, "Winning Balls Frequencies:\n\n\n", 
             transform=ax.transAxes, fontsize=12, fontweight='bold', va='top')
     
+    # Add text summary on the right side, sorted by frequency with color coding
     y_position = 0.95
     for i, (num, freq) in enumerate(number_frequency.items()):
         if i < 7:
@@ -111,11 +116,13 @@ def analyze_data(data):
     plt.tight_layout()
     plt.show()
 
+    # Correlation analysis
     plt.figure(figsize=(10, 8))
     sns.heatmap(data.corr(), annot=True, cmap='coolwarm')
     plt.title('Correlation Between Ball Positions')
     plt.show()
 
+    # Time series analysis
     data_with_index = data.copy()
     data_with_index['Draw Number'] = range(len(data))
     plt.figure(figsize=(12, 8))
@@ -131,24 +138,27 @@ def analyze_data(data):
 def evaluate_model(model, X_test, y_test, scaler, data, look_back, actual_numbers, actual_bonus):
     predictions = model.predict(X_test)
     
+    # Check for NaNs in predictions
     if np.isnan(predictions).any():
         print("Warning: NaN values found in predictions")
         print("Number of NaN values:", np.isnan(predictions).sum())
         print("Positions of NaN values:", np.where(np.isnan(predictions)))
-        return float('inf'), 0, 0  
+        return float('inf'), 0, 0  # Return worst possible score
     
     mse = mean_squared_error(y_test, predictions)
     
+    # Generate a prediction for the actual winning numbers
     last_numbers = scaler.transform(data.iloc[-look_back:].values)
     main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
     
+    # Calculate how many numbers match the actual winning numbers
     matches = len(set(main_numbers) & set(actual_numbers))
     bonus_match = 1 if bonus_number == actual_bonus else 0
     
     return mse, matches, bonus_match
 
 
-def cross_validate_model(data, hp, n_splits=5):
+def cross_validate_model(data, hp, actual_numbers, actual_bonus, n_splits=5):
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
     mse_scores = []
     match_scores = []
@@ -180,7 +190,7 @@ def run_trials(data, actual_numbers, actual_bonus):
         project_name='lottery_prediction'
     )
 
-    X, y, _ = prepare_data(data, look_back=10)  
+    X, y, _ = prepare_data(data, look_back=10)  # Default look_back, will be tuned
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val), callbacks=[ReduceLROnPlateau()])
@@ -189,7 +199,7 @@ def run_trials(data, actual_numbers, actual_bonus):
     
     results = []
     for hp in best_hps:
-        mse, matches = cross_validate_model(data, hp, n_splits=5)
+        mse, matches = cross_validate_model(data, hp, actual_numbers, actual_bonus, n_splits=5)
         results.append({
             'look_back': hp.get('look_back'),
             'lstm_units': hp.get('lstm_units'),
@@ -230,7 +240,14 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     best_model = build_model_tuner(best_hp)
-    history = best_model.fit(X_train, y_train, epochs=200, batch_size=32, validation_data=(X_test, y_test), callbacks=[ReduceLROnPlateau()], verbose=1)
+    
+    print("\nTraining the best model:")
+    history = best_model.fit(X_train, y_train, epochs=200, batch_size=32, 
+                             validation_data=(X_test, y_test), 
+                             callbacks=[ReduceLROnPlateau()], 
+                             verbose=1)  # Set verbose=1 to show progress for each epoch
+
+    print("\nModel training completed.")
 
     plt.figure(figsize=(10, 6))
     plt.plot(history.history['loss'], label='Training Loss')
@@ -252,8 +269,13 @@ def main():
     for i in range(5):
         main_numbers, bonus_number = generate_lotto_numbers(best_model, last_numbers, scaler)
         print(f"Prediction {i+1}: Main Numbers: {' '.join(map(str, main_numbers))}, Bonus Number: {bonus_number}")
-        new_numbers = np.array(main_numbers + [bonus_number]).reshape(1, -1)
-        last_numbers = np.vstack((last_numbers[1:], scaler.transform(new_numbers)))      
+        new_numbers = pd.DataFrame(np.array(main_numbers + [bonus_number]).reshape(1, -1), columns=data.columns)
+        last_numbers = np.vstack((last_numbers[1:], scaler.transform(new_numbers)))
+
+    print("\nPredictions completed.")
+    
+    # Uncomment the following line if you want to keep the console open
+    # input("Press Enter to exit...")
 
 
 if __name__ == "__main__":
