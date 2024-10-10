@@ -80,14 +80,11 @@ def generate_lotto_numbers(model, last_numbers, scaler):
 
 
 def analyze_data(data):
-    # Frequency analysis
     all_numbers = data.iloc[:, :6].values.flatten()
     
-    # Calculate frequency of each number and sort in descending order
     number_frequency = pd.Series(all_numbers).value_counts().sort_values(ascending=False)
     
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(24, 10))  # Increased width to accommodate text
+    fig, ax = plt.subplots(figsize=(24, 10))
     sns.histplot(all_numbers, bins=range(1, max(all_numbers)+2), kde=False, discrete=True, ax=ax)
     ax.set_title('Distribution of Winning Numbers', fontsize=16)
     ax.set_xlabel('Number', fontsize=12)
@@ -96,11 +93,9 @@ def analyze_data(data):
     ax.set_yticks(range(0, max(number_frequency)+1))
     ax.grid(axis='y', linestyle='--', alpha=0.7)
     
-    # Add summary title
     ax.text(1.02, 1.0, "Winning Balls Frequencies:\n\n\n", 
             transform=ax.transAxes, fontsize=12, fontweight='bold', va='top')
     
-    # Add text summary on the right side, sorted by frequency with color coding
     y_position = 0.95
     for i, (num, freq) in enumerate(number_frequency.items()):
         if i < 7:
@@ -116,13 +111,11 @@ def analyze_data(data):
     plt.tight_layout()
     plt.show()
 
-    # Correlation analysis
     plt.figure(figsize=(10, 8))
     sns.heatmap(data.corr(), annot=True, cmap='coolwarm')
     plt.title('Correlation Between Ball Positions')
     plt.show()
 
-    # Time series analysis
     data_with_index = data.copy()
     data_with_index['Draw Number'] = range(len(data))
     plt.figure(figsize=(12, 8))
@@ -138,20 +131,17 @@ def analyze_data(data):
 def evaluate_model(model, X_test, y_test, scaler, data, look_back, actual_numbers, actual_bonus):
     predictions = model.predict(X_test)
     
-    # Check for NaNs in predictions
     if np.isnan(predictions).any():
         print("Warning: NaN values found in predictions")
         print("Number of NaN values:", np.isnan(predictions).sum())
         print("Positions of NaN values:", np.where(np.isnan(predictions)))
-        return float('inf'), 0, 0  # Return worst possible score
+        return float('inf'), 0, 0  
     
     mse = mean_squared_error(y_test, predictions)
     
-    # Generate a prediction for the actual winning numbers
     last_numbers = scaler.transform(data.iloc[-look_back:].values)
     main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
     
-    # Calculate how many numbers match the actual winning numbers
     matches = len(set(main_numbers) & set(actual_numbers))
     bonus_match = 1 if bonus_number == actual_bonus else 0
     
@@ -190,7 +180,7 @@ def run_trials(data, actual_numbers, actual_bonus):
         project_name='lottery_prediction'
     )
 
-    X, y, _ = prepare_data(data, look_back=10)  # Default look_back, will be tuned
+    X, y, _ = prepare_data(data, look_back=10)  
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val), callbacks=[ReduceLROnPlateau()])
