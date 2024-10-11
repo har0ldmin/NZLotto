@@ -13,6 +13,8 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau
 from sklearn.metrics import mean_squared_error
 from keras_tuner import RandomSearch
 from tensorflow.keras.regularizers import l1_l2
+from tensorflow.keras.callbacks import EarlyStopping
+
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -51,21 +53,26 @@ def prepare_data(data, look_back=10):
     return np.array(X), np.array(y), scaler
 
 
-def build_model_tuner(hp):
-    model = Sequential([
-        Input(shape=(hp['look_back'], 7)),
-        LSTM(hp['lstm_units'], activation='relu', return_sequences=True, 
-             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
-        Dropout(hp['dropout']),
-        LSTM(hp['lstm_units'], activation='relu', return_sequences=True,
-             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
-        Dropout(hp['dropout']),
-        LSTM(hp['lstm_units'], activation='relu',
-             kernel_regularizer=l1_l2(l1=hp['l1'], l2=hp['l2'])),
-        Dropout(hp['dropout']),
-        Dense(7)
-    ])
-    model.compile(optimizer=Adam(hp['learning_rate']), loss='mse')
+def build_model(hp):
+    model = Sequential()
+    model.add(LSTM(hp.Int('lstm_units_1', 32, 512, step=32), 
+                   activation='relu', 
+                   return_sequences=True, 
+                   input_shape=(hp.Int('look_back', 5, 30), 7)))
+    model.add(Dropout(hp.Float('dropout_1', 0, 0.5, step=0.1)))
+    
+    for i in range(hp.Int('num_lstm_layers', 1, 3)):
+        model.add(LSTM(hp.Int(f'lstm_units_{i+2}', 32, 512, step=32), 
+                       activation='relu', 
+                       return_sequences=True))
+        model.add(Dropout(hp.Float(f'dropout_{i+2}', 0, 0.5, step=0.1)))
+    
+    model.add(LSTM(hp.Int('lstm_units_last', 32, 512, step=32), activation='relu'))
+    model.add(Dropout(hp.Float('dropout_last', 0, 0.5, step=0.1)))
+    model.add(Dense(7))
+    
+    model.compile(optimizer=Adam(hp.Float('learning_rate', 1e-5, 1e-2, sampling='LOG')),
+                  loss='mse')
     return model
 
 
@@ -182,20 +189,20 @@ def cross_validate_model(data, hp, actual_numbers, actual_bonus, n_splits=5):
 
 def run_trials(data, actual_numbers, actual_bonus):
     tuner = RandomSearch(
-        build_model_tuner,
-        objective='val_loss',
-        max_trials=50,
-        executions_per_trial=3,
-        directory='my_dir',
-        project_name='lottery_prediction'
+    build_model,
+    objective='val_loss',
+    max_trials=50,
+    executions_per_trial=3,
+    directory='my_dir',
+    project_name='lottery_prediction'
     )
 
-    X, y, _ = prepare_data(data, look_back=10)  # Default look_back, will be tuned
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    X, y, scaler = prepare_data(data, look_back=10)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
 
-    tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val), callbacks=[ReduceLROnPlateau()])
+    tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val))
 
-    best_hps = tuner.get_best_hyperparameters(num_trials=5)
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
     
     results = []
     for hp in best_hps:
@@ -215,6 +222,7 @@ def run_trials(data, actual_numbers, actual_bonus):
 
 
 def main():
+    # Load and prepare data
     data = load_historical_data('data.csv')
     if data is None:
         print("Failed to load data. Exiting.")
@@ -222,33 +230,41 @@ def main():
 
     analyze_data(data)
 
-    actual_numbers = [1, 3, 10, 24, 32, 38]
-    actual_bonus = 3
-    results = run_trials(data, actual_numbers, actual_bonus)
+    # Prepare data for model
+    X, y, scaler = prepare_data(data, look_back=10)  # You might want to make look_back a tunable parameter
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    sorted_results = sorted(results, key=lambda x: (-x['matches'], x['mse']))
+    # Define the hyperparameter search
+    tuner = RandomSearch(
+    build_model,
+    objective='val_loss',
+    max_trials=100,  # Increased from 50
+    executions_per_trial=3,
+    directory='my_dir',
+    project_name='lottery_prediction'
+    )
 
-    print("\nTop 5 Parameter Combinations:")
-    for i, result in enumerate(sorted_results[:5], 1):
-        print(f"{i}. look_back={result['look_back']}, lstm_units={result['lstm_units']}, "
-              f"dropout={result['dropout']}, learning_rate={result['learning_rate']}")
-        print(f"   L1={result['l1']:.6f}, L2={result['l2']:.6f}")
-        print(f"   Avg Matches: {result['matches']:.2f}, MSE: {result['mse']:.6f}\n")
+    # Use cross-validation
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    for train_index, val_index in kf.split(X):
+        X_train, X_val = X[train_index], X[val_index]
+        y_train, y_val = y[train_index], y[val_index]
+        tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val), 
+                    callbacks=[EarlyStopping(patience=10)])
 
-    best_hp = sorted_results[0]
-    X, y, scaler = prepare_data(data, best_hp['look_back'])
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # Perform the hyperparameter search
+    tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val), verbose=1)
 
-    best_model = build_model_tuner(best_hp)
-    
-    print("\nTraining the best model:")
-    history = best_model.fit(X_train, y_train, epochs=200, batch_size=32, 
-                             validation_data=(X_test, y_test), 
-                             callbacks=[ReduceLROnPlateau()], 
-                             verbose=1)  # Set verbose=1 to show progress for each epoch
+    # Get the best hyperparameters
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
 
-    print("\nModel training completed.")
+    # Build the model with the best hyperparameters
+    model = tuner.hypermodel.build(best_hps)
 
+    # Train the final model
+    history = model.fit(X_train, y_train, epochs=200, validation_data=(X_val, y_val), verbose=1)
+
+    # Plot the training history
     plt.figure(figsize=(10, 6))
     plt.plot(history.history['loss'], label='Training Loss')
     plt.plot(history.history['val_loss'], label='Validation Loss')
@@ -258,8 +274,9 @@ def main():
     plt.legend()
     plt.show()
 
-    last_numbers = scaler.transform(data.iloc[-best_hp['look_back']:].values)
-    main_numbers, bonus_number = generate_lotto_numbers(best_model, last_numbers, scaler)
+    # Generate predictions
+    last_numbers = scaler.transform(data.iloc[-best_hps.get('look_back'):].values)
+    main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
 
     print("\nPredicted Lotto Numbers:")
     print("Main Numbers:", " ".join(map(str, main_numbers)))
@@ -267,16 +284,12 @@ def main():
 
     print("\nMultiple Predictions:")
     for i in range(5):
-        main_numbers, bonus_number = generate_lotto_numbers(best_model, last_numbers, scaler)
+        main_numbers, bonus_number = generate_lotto_numbers(model, last_numbers, scaler)
         print(f"Prediction {i+1}: Main Numbers: {' '.join(map(str, main_numbers))}, Bonus Number: {bonus_number}")
         new_numbers = pd.DataFrame(np.array(main_numbers + [bonus_number]).reshape(1, -1), columns=data.columns)
         last_numbers = np.vstack((last_numbers[1:], scaler.transform(new_numbers)))
 
     print("\nPredictions completed.")
-    
-    # Uncomment the following line if you want to keep the console open
-    # input("Press Enter to exit...")
-
 
 if __name__ == "__main__":
     main()
