@@ -195,6 +195,7 @@ def run_trials(data, actual_numbers, actual_bonus):
     executions_per_trial=3,
     directory='my_dir',
     project_name='lottery_prediction'
+    overwrite=True
     )
 
     X, y, scaler = prepare_data(data, look_back=10)
