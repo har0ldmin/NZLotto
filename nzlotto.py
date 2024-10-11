@@ -177,7 +177,7 @@ def cross_validate_model(data, hp, actual_numbers, actual_bonus, n_splits=5):
         X_train, y_train, scaler = prepare_data(train_data, hp.get('look_back'))
         X_test, y_test, _ = prepare_data(test_data, hp.get('look_back'))
         
-        model = build_model_tuner(hp)
+        model = build_model(hp)
         model.fit(X_train, y_train, epochs=100, batch_size=32, verbose=0)
         
         mse, matches, _ = evaluate_model(model, X_test, y_test, scaler, test_data, hp.get('look_back'), actual_numbers, actual_bonus)
