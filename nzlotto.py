@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import itertools
 import os
-import datetime
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split, KFold
 from tensorflow.keras.models import Sequential
@@ -16,9 +15,8 @@ from keras_tuner import RandomSearch
 from tensorflow.keras.regularizers import l1_l2
 from tensorflow.keras.callbacks import EarlyStopping
 
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
-project_name = f"lottery_prediction_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 
 def load_historical_data(file_path):
@@ -193,10 +191,10 @@ def run_trials(data, actual_numbers, actual_bonus):
     tuner = RandomSearch(
     build_model,
     objective='val_loss',
-    max_trials=100,
+    max_trials=50,
     executions_per_trial=3,
     directory='my_dir',
-    project_name=project_name
+    project_name='lottery_prediction'
     )
 
     X, y, scaler = prepare_data(data, look_back=10)
