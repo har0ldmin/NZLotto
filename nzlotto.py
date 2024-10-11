@@ -69,7 +69,7 @@ def build_model(hp):
     
     model.add(LSTM(hp.Int('lstm_units_last', 32, 512, step=32), activation='relu'))
     model.add(Dropout(hp.Float('dropout_last', 0, 0.5, step=0.1)))
-    model.add(Dense(7))
+    model.add(Dense(7, activation='sigmoid'))
     
     model.compile(optimizer=Adam(hp.Float('learning_rate', 1e-5, 1e-2, sampling='LOG')),
                   loss='mse')
@@ -78,11 +78,20 @@ def build_model(hp):
 
 def generate_lotto_numbers(model, last_numbers, scaler):
     input_data = np.array([last_numbers])
-    input_data = input_data.reshape((input_data.shape[0], input_data.shape[1], 7))
     prediction = model.predict(input_data)
     prediction = scaler.inverse_transform(prediction)[0]
-    main_numbers = sorted([round(num) for num in prediction[:6]])
-    bonus_number = round(prediction[6])
+    
+    # Ensure numbers are within valid range (e.g., 1-40)
+    valid_range = lambda x: max(1, min(round(x), 40))
+    main_numbers = sorted(set([valid_range(num) for num in prediction[:6]]))
+    
+    # If we don't have enough unique numbers, add some
+    while len(main_numbers) < 6:
+        main_numbers.add(random.randint(1, 40))
+    
+    main_numbers = sorted(main_numbers)
+    bonus_number = valid_range(prediction[6])
+    
     return main_numbers, bonus_number
 
 
@@ -224,6 +233,8 @@ def run_trials(data, actual_numbers, actual_bonus):
 def main():
     # Load and prepare data
     data = load_historical_data('data.csv')
+    max_number = 40
+    data = data.applymap(lambda x: max(1, min(x, max_number)))
     if data is None:
         print("Failed to load data. Exiting.")
         return
