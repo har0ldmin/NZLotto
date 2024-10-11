@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import itertools
 import os
+import datetime
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split, KFold
 from tensorflow.keras.models import Sequential
@@ -14,7 +15,6 @@ from sklearn.metrics import mean_squared_error
 from keras_tuner import RandomSearch
 from tensorflow.keras.regularizers import l1_l2
 from tensorflow.keras.callbacks import EarlyStopping
-import datetime
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
