@@ -194,7 +194,7 @@ def run_trials(data, actual_numbers, actual_bonus):
     max_trials=50,
     executions_per_trial=3,
     directory='my_dir',
-    project_name='lottery_prediction'
+    project_name='lottery_prediction',
     overwrite=True
     )
 
