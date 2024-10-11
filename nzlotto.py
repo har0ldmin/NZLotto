@@ -43,7 +43,7 @@ def load_historical_data(file_path):
         return None
 
 
-def prepare_data(data, look_back=10):
+def prepare_data(data, look_back=24):
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_data = scaler.fit_transform(data)
     X, y = [], []
@@ -54,11 +54,12 @@ def prepare_data(data, look_back=10):
 
 
 def build_model(hp):
+    look_back = hp.Int('look_back', 16, 52, step=2)
     model = Sequential()
     model.add(LSTM(hp.Int('lstm_units_1', 32, 512, step=32), 
                    activation='relu', 
                    return_sequences=True, 
-                   input_shape=(hp.Int('look_back', 5, 30), 7)))
+                   input_shape=(look_back, 7)))
     model.add(Dropout(hp.Float('dropout_1', 0, 0.5, step=0.1)))
     
     for i in range(hp.Int('num_lstm_layers', 1, 3)):
@@ -183,8 +184,8 @@ def cross_validate_model(data, hp, actual_numbers, actual_bonus, n_splits=5):
         train_data = data.iloc[train_index]
         test_data = data.iloc[test_index]
         
-        X_train, y_train, scaler = prepare_data(train_data, hp.get('look_back'))
-        X_test, y_test, _ = prepare_data(test_data, hp.get('look_back'))
+        X_train, y_train, scaler = prepare_data(train_data, look_back=24)
+        X_test, y_test, _ = prepare_data(test_data, look_back=24)
         
         model = build_model(hp)
         model.fit(X_train, y_train, epochs=100, batch_size=32, verbose=0)
@@ -206,7 +207,7 @@ def run_trials(data, actual_numbers, actual_bonus):
     project_name='lottery_prediction'
     )
 
-    X, y, scaler = prepare_data(data, look_back=10)
+    X, y, scaler = prepare_data(data, look_back=24)
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
 
     tuner.search(X_train, y_train, epochs=100, validation_data=(X_val, y_val))
@@ -242,7 +243,7 @@ def main():
     analyze_data(data)
 
     # Prepare data for model
-    X, y, scaler = prepare_data(data, look_back=10)  # You might want to make look_back a tunable parameter
+    X, y, scaler = prepare_data(data, look_back=24)  # You might want to make look_back a tunable parameter
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Define the hyperparameter search
